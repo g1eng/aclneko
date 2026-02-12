@@ -101,7 +101,8 @@ impl Matcher {
         // An attribute is a pair of resource, conditional operator and target.
         let attribute_pattern = resource + conditional_op + &attr_target;
 
-        let attr_list = String::from(r"(?P<attrs>(\s+") + attribute_pattern.clone().as_str() + ")*)";
+        let attr_list =
+            String::from(r"(?P<attrs>(\s+") + attribute_pattern.clone().as_str() + ")*)";
         let attr_list = attr_list.as_str();
 
         // ACL header, ACL audit and ACL rule patterns
@@ -142,10 +143,11 @@ impl Matcher {
     ///use aclneko::syntax::*;
     ///
     ///let m = Matcher::new();
-    ///let c = m.get_category("1000 acl read");
+    ///let c = m.parse_category("1000 acl read");
     ///assert_eq!(c == Category::Header, true);
     ///```
-    pub fn get_category(&self, line: &str) -> Category {
+    ///
+    pub fn parse_category(&self, line: &str) -> Category {
         if self.is_version(line) {
             Category::Version
         } else if self.is_stat(line) {
@@ -179,7 +181,7 @@ impl Matcher {
         self.version.is_match(line)
     }
 
-    pub fn get_version(&self, line: &str) -> u32 {
+    pub fn parse_version(&self, line: &str) -> u32 {
         self.version.captures(&line).unwrap()[1]
             .to_string()
             .parse::<u32>()
@@ -202,7 +204,7 @@ impl Matcher {
         self.number_group.is_match(line)
     }
 
-    pub fn get_number_group(&self, line: &str) -> (String, String) {
+    pub fn parse_number_group(&self, line: &str) -> (String, String) {
         let mat = self.number_group.captures(&line).unwrap();
         (mat[1].to_string(), mat[2].to_string())
     }
@@ -211,7 +213,7 @@ impl Matcher {
         self.ip_group.is_match(line)
     }
 
-    pub fn get_ip_group(&self, line: &str) -> (String, String) {
+    pub fn parse_ip_group(&self, line: &str) -> (String, String) {
         let mat = self.ip_group.captures(&line).unwrap();
         (mat[1].to_string(), mat[2].to_string())
     }
@@ -220,7 +222,7 @@ impl Matcher {
         self.string_group.is_match(line)
     }
 
-    pub fn get_string_group(&self, line: &str) -> (String, String) {
+    pub fn parse_string_group(&self, line: &str) -> (String, String) {
         let mat = self.string_group.captures(&line).unwrap();
         (mat[1].to_string(), mat[2].to_string())
     }
@@ -229,22 +231,22 @@ impl Matcher {
         self.acl_header.is_match(line)
     }
 
-    /// get_acl_header returns acl header properties within a tuple.
+    /// parse_acl_header returns acl header properties within a tuple.
     /// Returned tuple holds acl priority, Operation and optional attribute for
     /// the Operation.
     ///
-    pub fn get_acl_header(&self, line: &str) -> (u32, Op, Vec<(Resource, Cond, String)>) {
+    pub fn parse_acl_header(&self, line: &str) -> (u16, Op, Vec<(Resource, Cond, String)>) {
         let cap = &self.acl_header.captures(line).unwrap();
         (
-            cap["priority"].to_string().parse::<u32>().unwrap(),
+            cap["priority"].to_string().parse::<u16>().unwrap(),
             Op::from(&cap["operation"]),
-            self.get_attr_list(&cap["attrs"].to_string()),
+            self.parse_attr_list(&cap["attrs"].to_string()),
         )
     }
 
-    /// get_attr_list returns a list of attributes which conposes optional ACL modifier.
+    /// parse_attr_list returns a list of attributes which conposes optional ACL modifier.
     ///
-    pub fn get_attr_list(&self, line: &str) -> Vec<(Resource, Cond, String)> {
+    pub fn parse_attr_list(&self, line: &str) -> Vec<(Resource, Cond, String)> {
         let mut res: Vec<(Resource, Cond, String)> = Vec::new();
         for cap in self.attr.captures_iter(line) {
             res.push((
@@ -262,14 +264,14 @@ impl Matcher {
         self.acl_audit.is_match(line)
     }
 
-    /// get_acl_audit_sequence returns audit sequence value
+    /// parse_acl_audit_sequence returns audit sequence value
     /// set to an audit line.
     /// Any lines supplied to this function must be a valid
     /// audit lines which is parsable with self.acl_audit matcher.
     ///
-    pub fn get_acl_audit_sequence(&self, line: &str) -> u32 {
+    pub fn parse_acl_audit_sequence(&self, line: &str) -> u16 {
         let cap = &self.acl_audit.captures(line).unwrap();
-        cap["seq"].to_string().parse::<u32>().unwrap()
+        cap["seq"].to_string().parse::<u16>().unwrap()
     }
 
     pub fn is_blank(&self, line: &str) -> bool {
@@ -286,18 +288,18 @@ impl Matcher {
         self.acl_rule.is_match(line)
     }
 
-    /// get_acl_rule returns ACL rule properties within a tuple,
+    /// parse_acl_rule returns ACL rule properties within a tuple,
     /// which contains rule priority, verb (allow/deny) and attribute
     /// list in vector format.
     /// Any lines supplied to this function must be a valid rule line
     /// which is ensured to be parsed with self.acl_rule matcher.
     ///
-    pub fn get_acl_rule(&self, line: &str) -> (u32, Verb, Vec<(Resource, Cond, String)>) {
+    pub fn parse_acl_rule(&self, line: &str) -> (u16, Verb, Vec<(Resource, Cond, String)>) {
         let cap = &self.acl_rule.captures(line).unwrap();
         (
-            cap["priority"].to_string().parse::<u32>().unwrap(),
+            cap["priority"].to_string().parse::<u16>().unwrap(),
             Verb::from(&cap["verb"]),
-            self.get_attr_list(&cap["attrs"].to_string()),
+            self.parse_attr_list(&cap["attrs"].to_string()),
         )
     }
 }
@@ -361,13 +363,13 @@ impl AuditMatcher {
     pub fn has_header(&self, line: &str) -> bool {
         self.header.is_match(line)
     }
-    pub fn get_header(&self, line: &str) -> Option<String> {
+    pub fn parse_header(&self, line: &str) -> Option<String> {
         match self.header.captures(&line) {
             Some(cap) => Some(String::from(&cap[0])),
             None => None,
         }
     }
-    pub fn get_body(&self, line: &str) -> Option<String> {
+    pub fn parse_body(&self, line: &str) -> Option<String> {
         match self.body.captures(&line) {
             Some(cap) => Some(String::from(&cap["body"])),
             None => None,
@@ -376,7 +378,7 @@ impl AuditMatcher {
     pub fn is_operation(&self, line: &str) -> bool {
         self.operation.is_match(line)
     }
-    pub fn get_operation(&self, line: &str) -> Option<String> {
+    pub fn parse_operation(&self, line: &str) -> Option<String> {
         match self.operation.captures(&line) {
             Some(cap) => Some(String::from(&cap[0])),
             None => None,
@@ -886,19 +888,128 @@ pub enum Resource {
     TaskPpid,
     TaskUid,
     TaskEuid,
+    TaskEgid,
+    TaskSuid,
+    TaskSgid,
+    TaskFsuid,
+    TaskFsgid,
     TaskExe,
     TaskDomain,
+    TaskType,
+    Perm,
+    DevMajor,
+    DevMinor,
     Path,
-    OldPath,
-    NewPath,
-    Source,
-    Target,
-    Fstype,
+    PathType,
+    PathIno,
     PathPerm,
     PathUid,
     PathGid,
+    PathMajor,
+    PathMinor,
+    PathDevMajor,
+    PathDevMinor,
+    PathFsmagic,
+    PathParent,
+    PathParentIno,
+    PathParentType,
+    PathParentPerm,
     PathParentUid,
     PathParentGid,
+    PathParentMajor,
+    PathParentMinor,
+    PathParentDevMajor,
+    PathParentDevMinor,
+    PathParentFsmagic,
+    OldPath,
+    OldPathIno,
+    OldPathType,
+    OldPathPerm,
+    OldPathUid,
+    OldPathGid,
+    OldPathMajor,
+    OldPathMinor,
+    OldPathDevMajor,
+    OldPathDevMinor,
+    OldPathFsmagic,
+    OldPathParent,
+    OldPathParentType,
+    OldPathParentIno,
+    OldPathParentPerm,
+    OldPathParentUid,
+    OldPathParentGid,
+    OldPathParentMajor,
+    OldPathParentMinor,
+    OldPathParentDevMajor,
+    OldPathParentDevMinor,
+    OldPathParentFsmagic,
+    NewPath,
+    NewPathIno,
+    NewPathType,
+    NewPathPerm,
+    NewPathUid,
+    NewPathGid,
+    NewPathMajor,
+    NewPathMinor,
+    NewPathDevMajor,
+    NewPathDevMinor,
+    NewPathFsmagic,
+    NewPathParent,
+    NewPathParentIno,
+    NewPathParentType,
+    NewPathParentPerm,
+    NewPathParentUid,
+    NewPathParentGid,
+    NewPathParentMajor,
+    NewPathParentMinor,
+    NewPathParentDevMajor,
+    NewPathParentDevMinor,
+    NewPathParentFsmagic,
+    Source,
+    SourceType,
+    SourceIno,
+    SourcePerm,
+    SourceUid,
+    SourceGid,
+    SourceMajor,
+    SourceMinor,
+    SourceDevMajor,
+    SourceDevMinor,
+    SourceFsmagic,
+    SourceParent,
+    SourceParentIno,
+    SourceParentType,
+    SourceParentPerm,
+    SourceParentUid,
+    SourceParentGid,
+    SourceParentMajor,
+    SourceParentMinor,
+    SourceParentDevMajor,
+    SourceParentDevMinor,
+    SourceParentFsmagic,
+    Target,
+    TargetType,
+    TargetIno,
+    TargetPerm,
+    TargetUid,
+    TargetGid,
+    TargetMajor,
+    TargetMinor,
+    TargetDevMajor,
+    TargetDevMinor,
+    TargetFsmagic,
+    TargetParent,
+    TargetParentIno,
+    TargetParentType,
+    TargetParentPerm,
+    TargetParentUid,
+    TargetParentGid,
+    TargetParentMajor,
+    TargetParentMinor,
+    TargetParentDevMajor,
+    TargetParentDevMinor,
+    TargetParentFsmagic,
+    Fstype,
     IP,
     Port,
     Exec,
@@ -925,19 +1036,126 @@ impl From<&str> for Resource {
             "task.ppid" => Self::TaskPpid,
             "task.uid" => Self::TaskUid,
             "task.euid" => Self::TaskEuid,
+            "task.egid" => Self::TaskEgid,
+            "task.suid" => Self::TaskSuid,
+            "task.sgid" => Self::TaskSgid,
+            "task.fsuid" => Self::TaskFsuid,
+            "task.fsgid" => Self::TaskFsgid,
             "task.exe" => Self::TaskExe,
             "task.domain" => Self::TaskDomain,
+            "task.type" => Self::TaskType,
+            "perm" => Self::Perm,
             "path" => Self::Path,
-            "old_path" => Self::OldPath,
-            "new_path" => Self::NewPath,
-            "source" => Self::Source,
-            "target" => Self::Target,
-            "fstype" => Self::Fstype,
+            "path.ino" => Self::PathIno,
             "path.perm" => Self::PathPerm,
             "path.uid" => Self::PathUid,
             "path.gid" => Self::PathGid,
+            "path.type" => Self::PathType,
+            "path.dev_major" => Self::PathDevMajor,
+            "path.major" => Self::PathMajor,
+            "path.dev_minor" => Self::PathDevMinor,
+            "path.minor" => Self::PathMinor,
+            "path.fsmagic" => Self::PathFsmagic,
+            "path.parent" => Self::PathParent,
+            "path.parent.ino" => Self::PathParentIno,
             "path.parent.uid" => Self::PathParentUid,
             "path.parent.gid" => Self::PathParentGid,
+            "path.parent.perm" => Self::PathParentPerm,
+            "path.parent.type" => Self::PathParentType,
+            "path.parent.dev_major" => Self::PathParentDevMajor,
+            "path.parent.major" => Self::PathParentMajor,
+            "path.parent.dev_minor" => Self::PathParentDevMinor,
+            "path.parent.minor" => Self::PathParentMinor,
+            "path.parent.fsmagic" => Self::PathParentFsmagic,
+            "old_path" => Self::OldPath,
+            "old_path.ino" => Self::OldPathIno,
+            "old_path.perm" => Self::OldPathPerm,
+            "old_path.uid" => Self::OldPathUid,
+            "old_path.gid" => Self::OldPathGid,
+            "old_path.type" => Self::OldPathType,
+            "old_path.dev_major" => Self::OldPathDevMajor,
+            "old_path.major" => Self::OldPathMajor,
+            "old_path.dev_minor" => Self::OldPathDevMinor,
+            "old_path.minor" => Self::OldPathMinor,
+            "old_path.fsmagic" => Self::OldPathFsmagic,
+            "old_path.parent" => Self::OldPathParent,
+            "old_path.parent.ino" => Self::OldPathParentIno,
+            "old_path.parent.uid" => Self::OldPathParentUid,
+            "old_path.parent.gid" => Self::OldPathParentGid,
+            "old_path.parent.perm" => Self::OldPathParentPerm,
+            "old_path.parent.type" => Self::OldPathParentType,
+            "old_path.parent.dev_major" => Self::OldPathParentDevMajor,
+            "old_path.parent.major" => Self::OldPathParentMajor,
+            "old_path.parent.dev_minor" => Self::OldPathParentDevMinor,
+            "old_path.parent.minor" => Self::OldPathParentMinor,
+            "old_path.parent.fsmagic" => Self::OldPathParentFsmagic,
+            "new_path" => Self::NewPath,
+            "new_path.ino" => Self::NewPathIno,
+            "new_path.perm" => Self::NewPathPerm,
+            "new_path.uid" => Self::NewPathUid,
+            "new_path.gid" => Self::NewPathGid,
+            "new_path.type" => Self::NewPathType,
+            "new_path.dev_major" => Self::NewPathDevMajor,
+            "new_path.major" => Self::NewPathMajor,
+            "new_path.dev_minor" => Self::NewPathDevMinor,
+            "new_path.minor" => Self::NewPathMinor,
+            "new_path.fsmagic" => Self::NewPathFsmagic,
+            "new_path.parent" => Self::NewPathParent,
+            "new_path.parent.ino" => Self::NewPathParentIno,
+            "new_path.parent.uid" => Self::NewPathParentUid,
+            "new_path.parent.gid" => Self::NewPathParentGid,
+            "new_path.parent.perm" => Self::NewPathParentPerm,
+            "new_path.parent.type" => Self::NewPathParentType,
+            "new_path.parent.dev_major" => Self::NewPathParentDevMajor,
+            "new_path.parent.major" => Self::NewPathParentMajor,
+            "new_path.parent.dev_minor" => Self::NewPathParentDevMinor,
+            "new_path.parent.minor" => Self::NewPathParentMinor,
+            "new_path.parent.fsmagic" => Self::NewPathParentFsmagic,
+            "source" => Self::Source,
+            "source.ino" => Self::SourceIno,
+            "source.perm" => Self::SourcePerm,
+            "source.uid" => Self::SourceUid,
+            "source.gid" => Self::SourceGid,
+            "source.type" => Self::SourceType,
+            "source.dev_major" => Self::SourceDevMajor,
+            "source.major" => Self::SourceMajor,
+            "source.dev_minor" => Self::SourceDevMinor,
+            "source.minor" => Self::SourceMinor,
+            "source.fsmagic" => Self::SourceFsmagic,
+            "source.parent" => Self::SourceParent,
+            "source.parent.ino" => Self::SourceParentIno,
+            "source.parent.uid" => Self::SourceParentUid,
+            "source.parent.gid" => Self::SourceParentGid,
+            "source.parent.perm" => Self::SourceParentPerm,
+            "source.parent.type" => Self::SourceParentType,
+            "source.parent.dev_major" => Self::SourceParentDevMajor,
+            "source.parent.major" => Self::SourceParentMajor,
+            "source.parent.dev_minor" => Self::SourceParentDevMinor,
+            "source.parent.minor" => Self::SourceParentMinor,
+            "source.parent.fsmagic" => Self::SourceParentFsmagic,
+            "target" => Self::Target,
+            "target.ino" => Self::TargetIno,
+            "target.perm" => Self::TargetPerm,
+            "target.uid" => Self::TargetUid,
+            "target.gid" => Self::TargetGid,
+            "target.type" => Self::TargetType,
+            "target.dev_major" => Self::TargetDevMajor,
+            "target.major" => Self::TargetMajor,
+            "target.dev_minor" => Self::TargetDevMinor,
+            "target.minor" => Self::TargetMinor,
+            "target.fsmagic" => Self::TargetFsmagic,
+            "target.parent" => Self::TargetParent,
+            "target.parent.ino" => Self::TargetParentIno,
+            "target.parent.uid" => Self::TargetParentUid,
+            "target.parent.gid" => Self::TargetParentGid,
+            "target.parent.perm" => Self::TargetParentPerm,
+            "target.parent.type" => Self::TargetParentType,
+            "target.parent.dev_major" => Self::TargetParentDevMajor,
+            "target.parent.major" => Self::TargetParentMajor,
+            "target.parent.dev_minor" => Self::TargetParentDevMinor,
+            "target.parent.minor" => Self::TargetParentMinor,
+            "target.parent.fsmagic" => Self::TargetParentFsmagic,
+            "fstype" => Self::Fstype,
             "ip" => Self::IP,
             "port" => Self::Port,
             "exec" => Self::Exec,
@@ -960,19 +1178,120 @@ impl Resource {
             Resource::TaskPpid,
             Resource::TaskUid,
             Resource::TaskEuid,
+            Resource::TaskSuid,
+            Resource::TaskSgid,
+            Resource::TaskFsuid,
+            Resource::TaskFsgid,
             Resource::TaskExe,
             Resource::TaskDomain,
+            Resource::TaskType,
+            Resource::Perm,
+            Resource::DevMajor,
+            Resource::DevMinor,
             Resource::Path,
             Resource::OldPath,
             Resource::NewPath,
-            Resource::Source,
-            Resource::Target,
             Resource::Fstype,
+            Resource::Path,
             Resource::PathPerm,
+            Resource::PathType,
             Resource::PathUid,
             Resource::PathGid,
+            Resource::PathMajor,
+            Resource::PathMinor,
+            Resource::PathDevMajor,
+            Resource::PathDevMinor,
+            Resource::PathFsmagic,
+            Resource::PathParent,
+            Resource::PathParentPerm,
+            Resource::PathParentType,
             Resource::PathParentUid,
             Resource::PathParentGid,
+            Resource::PathParentMajor,
+            Resource::PathParentMinor,
+            Resource::PathParentDevMajor,
+            Resource::PathParentDevMinor,
+            Resource::PathParentFsmagic,
+            Resource::OldPath,
+            Resource::OldPathPerm,
+            Resource::OldPathType,
+            Resource::OldPathUid,
+            Resource::OldPathGid,
+            Resource::OldPathMajor,
+            Resource::OldPathMinor,
+            Resource::OldPathDevMajor,
+            Resource::OldPathDevMinor,
+            Resource::OldPathFsmagic,
+            Resource::OldPathParent,
+            Resource::OldPathParentPerm,
+            Resource::OldPathParentType,
+            Resource::OldPathParentUid,
+            Resource::OldPathParentGid,
+            Resource::OldPathParentMajor,
+            Resource::OldPathParentMinor,
+            Resource::OldPathParentDevMajor,
+            Resource::OldPathParentDevMinor,
+            Resource::OldPathParentFsmagic,
+            Resource::NewPath,
+            Resource::NewPathPerm,
+            Resource::NewPathType,
+            Resource::NewPathUid,
+            Resource::NewPathGid,
+            Resource::NewPathMajor,
+            Resource::NewPathMinor,
+            Resource::NewPathDevMajor,
+            Resource::NewPathDevMinor,
+            Resource::NewPathFsmagic,
+            Resource::NewPathParent,
+            Resource::NewPathParentPerm,
+            Resource::NewPathParentType,
+            Resource::NewPathParentUid,
+            Resource::NewPathParentGid,
+            Resource::NewPathParentMajor,
+            Resource::NewPathParentMinor,
+            Resource::NewPathParentDevMajor,
+            Resource::NewPathParentDevMinor,
+            Resource::NewPathParentFsmagic,
+            Resource::Source,
+            Resource::SourcePerm,
+            Resource::SourceType,
+            Resource::SourceUid,
+            Resource::SourceGid,
+            Resource::SourceMajor,
+            Resource::SourceMinor,
+            Resource::SourceDevMajor,
+            Resource::SourceDevMinor,
+            Resource::SourceFsmagic,
+            Resource::SourceParent,
+            Resource::SourceParentPerm,
+            Resource::SourceParentType,
+            Resource::SourceParentUid,
+            Resource::SourceParentGid,
+            Resource::SourceParentMajor,
+            Resource::SourceParentMinor,
+            Resource::SourceParentDevMajor,
+            Resource::SourceParentDevMinor,
+            Resource::SourceParentFsmagic,
+            Resource::Target,
+            Resource::TargetPerm,
+            Resource::TargetType,
+            Resource::TargetUid,
+            Resource::TargetGid,
+            Resource::TargetMajor,
+            Resource::TargetMinor,
+            Resource::TargetDevMajor,
+            Resource::TargetDevMinor,
+            Resource::TargetFsmagic,
+            Resource::TargetParent,
+            Resource::TargetParentPerm,
+            Resource::TargetParentType,
+            Resource::TargetParentUid,
+            Resource::TargetParentGid,
+            Resource::TargetParentMajor,
+            Resource::TargetParentMinor,
+            Resource::TargetParentDevMajor,
+            Resource::TargetParentDevMinor,
+            Resource::TargetParentFsmagic,
             Resource::IP,
             Resource::Port,
             Resource::Exec,
@@ -998,19 +1317,128 @@ impl Resource {
             Self::TaskPpid => "task.ppid",
             Self::TaskUid => "task.uid",
             Self::TaskEuid => "task.euid",
+            Self::TaskEgid => "task.egid",
+            Self::TaskSuid => "task.suid",
+            Self::TaskFsuid => "task.fsuid",
+            Self::TaskSgid => "task.sgid",
+            Self::TaskFsgid => "task.fsgid",
             Self::TaskExe => "task.exe",
             Self::TaskDomain => "task.domain",
-            Self::Path => "path",
-            Self::OldPath => "old_path",
-            Self::NewPath => "new_path",
+            Self::TaskType => "task.type",
             Self::Source => "source",
+            Self::SourceIno => "source.ino",
+            Self::SourcePerm => "source.perm",
+            Self::SourceType => "source.type",
+            Self::SourceUid => "source.uid",
+            Self::SourceGid => "source.gid",
+            Self::SourceMajor => "source.major",
+            Self::SourceMinor => "source.minor",
+            Self::SourceDevMajor => "source.dev_major",
+            Self::SourceDevMinor => "source.dev_minor",
+            Self::SourceFsmagic => "source.fsmagic",
+            Self::SourceParent => "source.parent",
+            Self::SourceParentIno => "source.parent.ino",
+            Self::SourceParentPerm => "source.parent.perm",
+            Self::SourceParentType => "source.parent.type",
+            Self::SourceParentUid => "source.parent.uid",
+            Self::SourceParentGid => "source.parent.gid",
+            Self::SourceParentMajor => "source.parent.major",
+            Self::SourceParentMinor => "source.parent.minor",
+            Self::SourceParentDevMajor => "source.parent.dev_major",
+            Self::SourceParentDevMinor => "source.parent.dev_minor",
+            Self::SourceParentFsmagic => "source.parent.fsmagic",
             Self::Target => "target",
+            Self::TargetIno => "target.ino",
+            Self::TargetPerm => "target.perm",
+            Self::TargetType => "target.type",
+            Self::TargetUid => "target.uid",
+            Self::TargetGid => "target.gid",
+            Self::TargetMajor => "target.major",
+            Self::TargetMinor => "target.minor",
+            Self::TargetDevMajor => "target.dev_major",
+            Self::TargetDevMinor => "target.dev_minor",
+            Self::TargetFsmagic => "target.fsmagic",
+            Self::TargetParent => "target.parent",
+            Self::TargetParentIno => "target.parent.ino",
+            Self::TargetParentPerm => "target.parent.perm",
+            Self::TargetParentType => "target.parent.type",
+            Self::TargetParentUid => "target.parent.uid",
+            Self::TargetParentGid => "target.parent.gid",
+            Self::TargetParentMajor => "target.parent.major",
+            Self::TargetParentMinor => "target.parent.minor",
+            Self::TargetParentDevMajor => "target.parent.dev_major",
+            Self::TargetParentDevMinor => "target.parent.dev_minor",
+            Self::TargetParentFsmagic => "target.parent.fsmagic",
             Self::Fstype => "fstype",
+            Self::Perm => "perm",
+            Self::DevMajor => "dev_major",
+            Self::DevMinor => "dev_minor",
+            Self::Path => "path",
+            Self::PathIno => "path.ino",
             Self::PathPerm => "path.perm",
+            Self::PathType => "path.type",
             Self::PathUid => "path.uid",
             Self::PathGid => "path.gid",
+            Self::PathMajor => "path.major",
+            Self::PathMinor => "path.minor",
+            Self::PathDevMajor => "path.dev_major",
+            Self::PathDevMinor => "path.dev_minor",
+            Self::PathFsmagic => "path.fsmagic",
+            Self::PathParent => "path.parent",
+            Self::PathParentIno => "path.parent.ino",
+            Self::PathParentPerm => "path.parent.perm",
+            Self::PathParentType => "path.parent.type",
             Self::PathParentUid => "path.parent.uid",
             Self::PathParentGid => "path.parent.gid",
+            Self::PathParentMajor => "path.parent.major",
+            Self::PathParentMinor => "path.parent.minor",
+            Self::PathParentDevMajor => "path.parent.dev_major",
+            Self::PathParentDevMinor => "path.parent.dev_minor",
+            Self::PathParentFsmagic => "path.parent.fsmagic",
+            Self::OldPath => "old_path",
+            Self::OldPathIno => "old_path.ino",
+            Self::OldPathPerm => "old_path.perm",
+            Self::OldPathType => "old_path.type",
+            Self::OldPathUid => "old_path.uid",
+            Self::OldPathGid => "old_path.gid",
+            Self::OldPathMajor => "old_path.major",
+            Self::OldPathMinor => "old_path.minor",
+            Self::OldPathDevMajor => "old_path.dev_major",
+            Self::OldPathDevMinor => "old_path.dev_minor",
+            Self::OldPathParent => "old_path.parent",
+            Self::OldPathFsmagic => "old_path.fsmagic",
+            Self::OldPathParentIno => "old_path.parent.ino",
+            Self::OldPathParentPerm => "old_path.parent.perm",
+            Self::OldPathParentType => "old_path.parent.type",
+            Self::OldPathParentUid => "old_path.parent.uid",
+            Self::OldPathParentGid => "old_path.parent.gid",
+            Self::OldPathParentMajor => "old_path.parent.major",
+            Self::OldPathParentMinor => "old_path.parent.minor",
+            Self::OldPathParentDevMajor => "old_path.parent.dev_major",
+            Self::OldPathParentDevMinor => "old_path.parent.dev_minor",
+            Self::OldPathParentFsmagic => "old_path.parent.fsmagic",
+            Self::NewPath => "new_path",
+            Self::NewPathIno => "new_path.ino",
+            Self::NewPathPerm => "new_path.perm",
+            Self::NewPathType => "new_path.type",
+            Self::NewPathUid => "new_path.uid",
+            Self::NewPathGid => "new_path.gid",
+            Self::NewPathMajor => "new_path.major",
+            Self::NewPathMinor => "new_path.minor",
+            Self::NewPathDevMajor => "new_path.dev_major",
+            Self::NewPathDevMinor => "new_path.dev_minor",
+            Self::NewPathFsmagic => "new_path.fsmagic",
+            Self::NewPathParent => "new_path.parent",
+            Self::NewPathParentIno => "new_path.parent.ino",
+            Self::NewPathParentPerm => "new_path.parent.perm",
+            Self::NewPathParentType => "new_path.parent.type",
+            Self::NewPathParentUid => "new_path.parent.uid",
+            Self::NewPathParentGid => "new_path.parent.gid",
+            Self::NewPathParentMajor => "new_path.parent.major",
+            Self::NewPathParentMinor => "new_path.parent.minor",
+            Self::NewPathParentDevMajor => "new_path.parent.dev_major",
+            Self::NewPathParentDevMinor => "new_path.parent.dev_minor",
+            Self::NewPathParentFsmagic => "new_path.parent.fsmagic",
             Self::IP => "ip",
             Self::Port => "port",
             Self::Exec => "exec",
