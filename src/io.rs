@@ -67,7 +67,7 @@ pub fn apply_acl_stdin() -> Result<(), String> {
 ///
 pub fn clear_acl(acl: &Acl) -> Result<(), String> {
     let mut fp = open_syspolicy_write().map_err(|e| e.to_string())?;
-    for h in acl.get_acl_headers() {
+    for h in acl.parse_acl_headers() {
         let mut text = format!("delete {} acl {}", h.priority, h.op.as_str());
         for attr in &h.attr {
             text += &format!(" {}{}{}", attr.0.as_str(), attr.1.as_str(), attr.2);
@@ -90,13 +90,13 @@ pub fn clear_rule(patch: &Acl, dst: &Acl) -> Result<(), String> {
     let mut fp = open_syspolicy_write().map_err(|e| e.to_string())?;
     let mut new_acls = vec![];
 
-    for h in patch.get_acl_headers() {
+    for h in patch.parse_acl_headers() {
         eprintln!("header: {}", h);
         let removing_block = patch
-            .get_acl_block_by_header(format!("{}", &h).as_str())
+            .parse_acl_block_by_header(format!("{}", &h).as_str())
             .unwrap();
         let dst_block = dst
-            .get_acl_block_by_header(format!("{}", &h).as_str())
+            .parse_acl_block_by_header(format!("{}", &h).as_str())
             .unwrap();
 
         for i in 0..removing_block.rule.len() {
@@ -121,7 +121,7 @@ pub fn clear_rule(patch: &Acl, dst: &Acl) -> Result<(), String> {
 /// Use unmerge_acl to rule-based unmerging for ACLs.
 ///
 pub fn remove_acl(patch: &Acl, from: &Acl) -> Result<(), String> {
-    for h in patch.get_acl_headers() {
+    for h in patch.parse_acl_headers() {
         if from.has_header(&h) == false {
             return Err(format!("no such header: {}", h));
         }
@@ -150,7 +150,7 @@ pub fn clear_acl_from_stdin() -> Result<(), String> {
 /// remove for each rule defined in the patch from ACL blocks.
 ///
 pub fn unmerge_acl(patch: &Acl, from: &Acl) -> Result<(), String> {
-    for h in patch.get_acl_headers() {
+    for h in patch.parse_acl_headers() {
         if from.has_header(&h) == false {
             return Err(format!("no such header: {}", h));
         }

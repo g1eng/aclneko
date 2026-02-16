@@ -1,14 +1,14 @@
-mod quota;
 mod block;
+mod quota;
 
 use crate::syntax::*;
+use block::{AclBlock, AclHeader, AclRule};
 use quota::*;
-use block::{AclBlock,AclHeader,AclRule};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::{Entry, Keys, Values};
 use std::collections::HashMap;
-use std::collections::hash_map::{Keys,Entry,Values};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -36,13 +36,13 @@ impl FromStr for Acl {
     type Err = String;
     fn from_str(feed: &str) -> Result<Self, <Self as FromStr>::Err> {
         let mut acl = Acl::new();
-        let mut lineno: u32 = 1;
+        let mut lineno: u16 = 1;
         // referencial instance for HashMap key (on acl.data.table)
         let mut header_ref = AclHeader::new();
 
         for line in String::from(feed).split('\n') {
-            match acl.pattern.get_category(&line) {
-                Category::Version => acl.data.version = acl.pattern.get_version(&line),
+            match acl.pattern.parse_category(&line) {
+                Category::Version => acl.data.version = acl.pattern.parse_version(&line),
                 Category::Quota => {}
                 Category::Stat => {}
                 Category::NumberGroupDef => acl.number_group_add(&line),
@@ -135,7 +135,7 @@ impl Acl {
     }
 
     pub fn number_group_add(&mut self, line: &str) {
-        let t = self.pattern.get_number_group(&line);
+        let t = self.pattern.parse_number_group(&line);
         self.data
             .number_group
             .entry(t.0)
@@ -144,7 +144,7 @@ impl Acl {
     }
 
     pub fn ip_group_add(&mut self, line: &str) {
-        let t = self.pattern.get_ip_group(&line);
+        let t = self.pattern.parse_ip_group(&line);
         self.data
             .ip_group
             .entry(t.0)
@@ -153,7 +153,7 @@ impl Acl {
     }
 
     pub fn string_group_add(&mut self, line: &str) {
-        let t = self.pattern.get_string_group(&line);
+        let t = self.pattern.parse_string_group(&line);
         self.data
             .string_group
             .entry(t.0)
@@ -166,7 +166,7 @@ impl Acl {
     /// it does not make changes.
     ///
     pub fn header_add(&mut self, line: &str) -> AclHeader {
-        let a = self.pattern.get_acl_header(line);
+        let a = self.pattern.parse_acl_header(line);
         let header = AclHeader {
             priority: a.0,
             op: a.1,
@@ -197,7 +197,7 @@ impl Acl {
     /// AclHeader as a key.
     ///
     pub fn audit_add(&mut self, header: &AclHeader, line: &str) {
-        let seq = self.pattern.get_acl_audit_sequence(&line.clone());
+        let seq = self.pattern.parse_acl_audit_sequence(&line.to_string());
         let audit = AclRule {
             priority: seq,
             verb: Verb::Audit,
@@ -210,7 +210,7 @@ impl Acl {
     /// AclHeader as a key.
     ///
     pub fn rule_add(&mut self, header: &AclHeader, line: &str) {
-        let r = self.pattern.get_acl_rule(&line);
+        let r = self.pattern.parse_acl_rule(&line);
         if self.debug {
             println!("prio={} verb={:?} attr={:?}", r.0, r.1, r.2.clone());
         }
@@ -277,7 +277,10 @@ impl Acl {
         for v in self.data.values() {
             for i in 0..v.rule.len() {
                 if self.debug {
-                    eprintln!("\x1B[33m[debug]\x1B[0m verb: {}, cmp {}", &v.rule[i].verb, &verb)
+                    eprintln!(
+                        "\x1B[33m[debug]\x1B[0m verb: {}, cmp {}",
+                        &v.rule[i].verb, &verb
+                    )
                 }
                 if v.rule[i].verb == verb {
                     res[i] += 1;
@@ -307,16 +310,16 @@ impl Acl {
         res
     }
 
-    /// get_acl_blocks_by_header returns the reference to an AclBlock.
+    /// parse_acl_blocks_by_header returns the reference to an AclBlock.
     /// It makes a match for given line and find a line which has completely
     /// equal semantics in the policy.
     ///
-    pub fn get_acl_block_by_header(&self, line: &str) -> Option<&AclBlock> {
+    pub fn parse_acl_block_by_header(&self, line: &str) -> Option<&AclBlock> {
         if !self.pattern.is_acl_header(line) {
             eprintln!("invalid syntax for acl header");
             return None;
         }
-        let a = self.pattern.get_acl_header(&line);
+        let a = self.pattern.parse_acl_header(&line);
         let mut hasher = DefaultHasher::new();
         AclHeader {
             priority: a.0,
@@ -329,19 +332,17 @@ impl Acl {
             None => None,
         }
     }
-    
-    
-    
-    // get_acl_blocks_by_header_hash returns a reference to AclBlock, that is pointed from
-    // the given hash. 
-    pub fn get_acl_blocks_by_header_hash(&self, hash: u64) -> Option<&AclBlock> {
+
+    // parse_acl_blocks_by_header_hash returns a reference to AclBlock, that is pointed from
+    // the given hash.
+    pub fn parse_acl_blocks_by_header_hash(&self, hash: u64) -> Option<&AclBlock> {
         self.data.get(hash)
     }
 
-    /// get_acl_blocks_by_header_priority returns sets of header and rules for which the header priority
+    /// parse_acl_blocks_by_header_priority returns sets of header and rules for which the header priority
     /// equals to given value.
     ///
-    pub fn get_acl_blocks_by_header_priority(&self, priority: u32) -> Vec<&AclBlock> {
+    pub fn parse_acl_blocks_by_header_priority(&self, priority: u16) -> Vec<&AclBlock> {
         let mut res = vec![];
         for b in self.data.values() {
             if b.header.priority == priority {
@@ -356,10 +357,10 @@ impl Acl {
         res
     }
 
-    /// get_acl_blocks_by_header_operation returns sets of header and rules for which the header operaion
+    /// parse_acl_blocks_by_header_operation returns sets of header and rules for which the header operaion
     /// equals to given operation.
     ///
-    pub fn get_acl_blocks_by_header_operation(&self, op: Op) -> Vec<&AclBlock> {
+    pub fn parse_acl_blocks_by_header_operation(&self, op: Op) -> Vec<&AclBlock> {
         let mut res = vec![];
         for b in self.data.values() {
             if b.header.op == op {
@@ -373,12 +374,15 @@ impl Acl {
         res
     }
 
-    /// get_acl_blocks_by_header_pattern returns sets of header and rules within Results type.
+    /// parse_acl_blocks_by_header_pattern returns sets of header and rules within Results type.
     /// The given string is assumed to be an regex seed, unless it returns error.
     /// Any headers which matches given regex pattern are returned with coorespondiing
     /// Rule sets.
     ///
-    pub fn get_acl_blocks_by_header_pattern(&self, pattern: &str) -> Result<Vec<&AclBlock>, String> {
+    pub fn parse_acl_blocks_by_header_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<Vec<&AclBlock>, String> {
         match Regex::new(pattern) {
             Ok(pat) => {
                 let mut res = vec![];
@@ -403,14 +407,14 @@ impl Acl {
         }
     }
 
-    /// get_acl_blocks_by_rule returns a slice of sets of AclHeader and AclRule(s).
+    /// parse_acl_blocks_by_rule returns a slice of sets of AclHeader and AclRule(s).
     /// It makes a match for given line as a rule, and find rule(s) which has
     /// completely equal semantics. Finally, it returns ACL block(s) within a
     /// slice of tuple, which contains matched rules.
     ///
-    pub fn get_acl_blocks_by_rule(&self, line: &str) -> Vec<&AclBlock> {
+    pub fn parse_acl_blocks_by_rule(&self, line: &str) -> Vec<&AclBlock> {
         let mut res = vec![];
-        let comp_rule = self.pattern.get_acl_rule(line);
+        let comp_rule = self.pattern.parse_acl_rule(line);
         let comp_rule = AclRule {
             priority: comp_rule.0,
             verb: comp_rule.1,
@@ -431,12 +435,15 @@ impl Acl {
         res
     }
 
-    /// get_acl_blocks_by_rule_pattern returns sets of header and rules within Results type.
+    /// parse_acl_blocks_by_rule_pattern returns sets of header and rules within Results type.
     /// The given string is assumed to be an regex seed, unless it returns error.
-    /// This is a rule version of `get_acl_blocks_by_header_pattern` and returns any ACL
+    /// This is a rule version of `parse_acl_blocks_by_header_pattern` and returns any ACL
     /// blocks which has matched pattern in its rules.
     ///
-    pub fn get_acl_blocks_by_rule_pattern(&self, pattern: &str) -> Result<Vec<&AclBlock>, String> {
+    pub fn parse_acl_blocks_by_rule_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<Vec<&AclBlock>, String> {
         match Regex::new(pattern) {
             Ok(pat) => {
                 let mut res = vec![];
@@ -469,9 +476,9 @@ impl Acl {
         }
     }
 
-    /// get_acl_headers returns simple slice for all header in the Acl.
+    /// parse_acl_headers returns simple slice for all header in the Acl.
     ///
-    pub fn get_acl_headers(&self) -> Vec<AclHeader> {
+    pub fn parse_acl_headers(&self) -> Vec<AclHeader> {
         let mut res = vec![];
         for b in self.data.values() {
             res.push(b.header.clone());
@@ -483,18 +490,18 @@ impl Acl {
         res
     }
 
-    pub fn get_acl_headers_by_pattern(&self, pat: &str) -> Vec<AclHeader> {
-        if let Ok(a) = self.get_acl_by_header(pat) {
-            a.get_acl_headers()
+    pub fn parse_acl_headers_by_pattern(&self, pat: &str) -> Vec<AclHeader> {
+        if let Ok(a) = self.parse_acl_by_header(pat) {
+            a.parse_acl_headers()
         } else {
             vec![]
         }
     }
-    
+
     /// list_acl_headers
     ///
     pub fn list_acl_headers(&self) {
-        for h in self.get_acl_headers() {
+        for h in self.parse_acl_headers() {
             println!("{}", h);
         }
     }
@@ -507,71 +514,63 @@ impl Acl {
         self.data.contains_key(hasher.finish())
     }
 
-    /// get_acl_by_header returns a new Acl with header query.
+    /// parse_acl_by_header returns a new Acl with header query.
     /// A query may be digit (for priority),  operation string (for Op::from),
-    /// a regular expression string prefixed with `regex:` or a full line of a header.
     ///
-    pub fn get_acl_by_header(&self, query: &str) -> Result<Acl, String> {
-        let blocks = match query.parse::<u32>() {
-            Ok(n) => self.get_acl_blocks_by_header_priority(n),
+    pub fn parse_acl_by_header(&self, query: &str) -> Result<Acl, String> {
+        let blocks = match query.parse::<u16>() {
+            Ok(n) => self.parse_acl_blocks_by_header_priority(n),
             Err(_) => match Op::from(query) {
                 Op::Error => {
-                    let pat = Regex::new(r"^regex:(?P<pat>.+$)").unwrap();
-                    match pat.is_match(query) {
-                        true => {
-                            let cap = pat.captures(query).unwrap();
-                            match self.get_acl_blocks_by_header_pattern(&cap["pat"]) {
-                                Ok(set) => set,
-                                Err(e) => {
-                                    eprintln!("{}", e);
-                                    vec![]
-                                }
-                            }
-                        }
-                        false => {
-                            return Err(format!("no such pattern: {}", query));
-                        }
-                    }
+                    return Err(format!("invalid query pattern: {}\ngive number (priority) or a valid operation (e.g. chmod).", query));
                 }
-                _ => self
-                    .get_acl_blocks_by_header_operation(Op::from(query)),
+                _ => self.parse_acl_blocks_by_header_operation(Op::from(query)),
             },
         };
         Ok(Acl::from(blocks))
     }
 
-    /// get_acl_by_rule results a new Acl with rule query.
-    /// Now a query should be a regex pattern with the prefix `regex:`.
-    ///
-    pub fn get_acl_by_rule_pattern(&self, query: &str) -> Result<Acl, String> {
-        let regex_query = Regex::new(r"^regex:(?P<pat>.+)").unwrap();
-        if regex_query.is_match(query) {
-            let cap = regex_query.captures(query).unwrap();
-            let set = self.get_acl_blocks_by_rule_pattern(&cap["pat"])?;
-            if set.len() != 0 {
-                return Ok(Acl::from(set));
-            }
-            return Err("regex pattern is blank".to_string());
-        }
-
-        let set = self.get_acl_blocks_by_rule(query);
-        if set.len() != 0 {
-            Ok(Acl::from(set))
-        } else {
-            Err("no rules found".to_string())
+    /// parse_acl_by_header_with_regex returns a new Acl with header query in regex pattern.
+    /// Headers are parsed as plain strings and filtered with given regex.
+    pub fn parse_acl_by_header_with_regex(&self, query: &str) -> Result<Acl, String> {
+        match self.parse_acl_blocks_by_header_pattern(query) {
+            Ok(set) => Ok(Acl::from(set)),
+            Err(e) => Err(e.to_string()),
         }
     }
 
+    /// parse_acl_by_rule results a new Acl with rule query.
+    /// Now a query should be a regex pattern with the prefix `regex:`.
+    ///
+    pub fn parse_acl_by_rule(&self, query: &str) -> Result<Acl, String> {
+        let set = self.parse_acl_blocks_by_rule(query);
+        if set.len() != 0 {
+            Ok(Acl::from(set))
+        } else {
+            Err(format!("no such rules: {}", query))
+        }
+    }
+
+    /// parse_acl_by_rule returns a new Acl with header query in regex pattern.
+    /// Headers are parsed as plain strings and filtered with given regex.
+    pub fn parse_acl_by_rule_with_regex(&self, query: &str) -> Result<Acl, String> {
+        let set = self.parse_acl_blocks_by_rule_pattern(query)?;
+        if set.len() != 0 {
+            return Ok(Acl::from(set));
+        }
+        return Err("no matches".to_string());
+    }
+
     pub fn list_header_by_header_pattern(&self, query: &str) -> Result<Acl, String> {
-        let blocks = match query.parse::<u32>() {
-            Ok(n) => self.get_acl_blocks_by_header_priority(n),
+        let blocks = match query.parse::<u16>() {
+            Ok(n) => self.parse_acl_blocks_by_header_priority(n),
             Err(_) => match Op::from(query) {
                 Op::Error => {
                     let pat = Regex::new(r"^regex:(?P<pat>.+$)").unwrap();
                     match pat.is_match(query) {
                         true => {
                             let cap = pat.captures(query).unwrap();
-                            match self.get_acl_blocks_by_header_pattern(&cap["pat"]) {
+                            match self.parse_acl_blocks_by_header_pattern(&cap["pat"]) {
                                 Ok(set) => set,
                                 Err(e) => {
                                     eprintln!("{}", e);
@@ -584,8 +583,7 @@ impl Acl {
                         }
                     }
                 }
-                _ => self
-                    .get_acl_blocks_by_header_operation(Op::from(query)),
+                _ => self.parse_acl_blocks_by_header_operation(Op::from(query)),
             },
         };
         Ok(Acl::from(blocks))
@@ -645,7 +643,6 @@ impl fmt::Debug for Acl {
     }
 }
 
-
 /// AclData represents a policy entity. ACL blocks are held in the `list`
 /// field within HashMap, keyed with hash value of AclHeader instances.
 ///
@@ -681,7 +678,7 @@ impl fmt::Debug for AclData {
     }
 }
 
-impl AclData {
+impl<'a> AclData {
     pub fn new() -> Self {
         AclData {
             version: 0,
@@ -696,7 +693,7 @@ impl AclData {
     pub fn clear(&mut self) {
         self.version = 0;
         self.stat = 0;
-//         self.quota.clear();
+        //         self.quota.clear();
         self.number_group.clear();
         self.ip_group.clear();
         self.string_group.clear();
@@ -706,29 +703,94 @@ impl AclData {
         self.table.clear();
         self.table = hm;
     }
-    pub fn as_table_ref(&self) -> &HashMap<u64,AclBlock> {
+    pub fn as_table_ref(&self) -> &HashMap<u64, AclBlock> {
         &self.table
     }
-    
+
     pub fn get(&self, k: u64) -> Option<&AclBlock> {
         self.table.get(&k)
     }
-    
-    pub fn keys(&self) -> Keys<u64, AclBlock> {
+
+    pub fn keys(&'a self) -> Keys<'a, u64, AclBlock> {
         self.table.keys()
     }
-    pub fn entry(&mut self, k: u64) -> Entry<u64, AclBlock> {
+    pub fn entry(&'a mut self, k: u64) -> Entry<'a, u64, AclBlock> {
         self.table.entry(k)
     }
-    pub fn values(&self) -> Values<u64, AclBlock> {
+    pub fn values(&'a self) -> Values<'a, u64, AclBlock> {
         self.table.values()
     }
     pub fn contains_key(&self, k: u64) -> bool {
         self.table.contains_key(&k)
     }
-    
+
     pub fn len(&self) -> usize {
         self.table.len()
     }
 }
 
+#[cfg(test)]
+mod bdd {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn get_acl_fixtures(p: &str, is_valid_fixtures: bool) -> Vec<String> {
+        let mut files = Vec::new();
+        let root = PathBuf::from(p);
+
+        let contents = std::fs::read_dir(root).unwrap();
+
+        for f in contents {
+            let line = f.unwrap();
+            if (line.file_name().to_string_lossy().starts_with("0")
+                || line.file_name().to_string_lossy().starts_with("1"))
+                ^ !is_valid_fixtures
+            {
+                files.push(format!("{}{}", p, line.file_name().to_string_lossy()));
+            }
+        }
+
+        files.sort();
+        files
+    }
+
+    #[test]
+    fn test_valid_policies() {
+        for f in get_acl_fixtures(
+            format!("{}/{}", env::current_dir().unwrap().display(), "fixtures/").as_str(),
+            true,
+        ) {
+            let data = fs::read_to_string(&f).unwrap();
+            match Acl::from_str(&data) {
+                Ok(_) => {
+                    println!("\x1b[32mOK\x1b[00m: {}", f)
+                }
+                Err(e) => {
+                    eprintln!("\x1b[31mERR\x1b[00m: {} ({})", f, e.to_string());
+                    panic!("\x1b[31mERR\x1b[00m:\n {} ({})", f, e.to_string());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_invalid_policies() {
+        for f in get_acl_fixtures(
+            format!("{}/{}", env::current_dir().unwrap().display(), "fixtures/").as_str(),
+            false,
+        ) {
+            let data = fs::read_to_string(&f).unwrap();
+            match Acl::from_str(&data) {
+                Ok(_) => {
+                    eprintln!("\x1b[31mERR\x1b[00m: {} (should be error)", f);
+                    panic!("\x1b[31mERR\x1b[00m:\n {} (should be error)", f);
+                }
+                Err(_) => {
+                    println!("\x1b[32mOK\x1b[00m: {}", f)
+                }
+            }
+        }
+    }
+}

@@ -42,7 +42,6 @@ impl AclBlock {
     }
 }
 
-
 /// AclHeader represents a header declaration which heads to Rules in an
 /// ACL block.
 ///
@@ -51,7 +50,7 @@ impl AclBlock {
 ///
 #[derive(Hash, Clone, Serialize, Deserialize)]
 pub struct AclHeader {
-    pub priority: u32,
+    pub priority: u16,
     pub op: Op,
     pub attr: Vec<(Resource, Cond, String)>,
 }
@@ -135,7 +134,7 @@ impl fmt::Debug for AclHeader {
 ///
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AclRule {
-    pub priority: u32,
+    pub priority: u16,
     pub verb: Verb,
     pub attr: Vec<(Resource, Cond, String)>,
 }

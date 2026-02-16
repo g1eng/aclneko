@@ -1,6 +1,6 @@
 [package]
 name = "aclneko"
-version = "0.16.5"
+version = "0.16.7"
 edition = "2021"
 homepage = "https://github.com/g1eng/aclneko"
 repository = "https://github.com/g1eng/aclneko"
